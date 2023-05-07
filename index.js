@@ -49,7 +49,11 @@ client.on('data', function(data) {
     if (data.toString().startsWith('#'))
     {
         let dataString = data.toString().slice(1, -1).split(' ');
-        console.log(dataString);
+        let struct = dataString[1].split(':');
+        // datastring[0] = number of message
+        // Send back #datastring[0] +
+        client.write('#' + dataString[0] + ' +' + '\r\n');
+        console.log(struct);
     }
 
 });
