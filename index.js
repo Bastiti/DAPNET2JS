@@ -1,69 +1,112 @@
-// Create a net tcp client
+// Import net module.
 const net = require('net');
 
-// Mettons les infos du serveur DAPNET dans des variables
-const dapnetHost = 'db0dbn.ig-funk-siebengebirge.de';
-const dapnetPort = 43434;
-// Mettons les infos de l'émetteur dans des variables
-const emitterCallsign = 'on4bcy2';
-const emitterAUTH = 'x9gqcu89IrItzP0MgaA8';
-// Mettons le nom de notre projet et la version dans des variables
-const appName = 'esp32';
-const appVersion = 'v0.1';
+// Import config.json file.
+const config = require('./config.json');
 
-let string = `[${appName} ${appVersion} ${emitterCallsign} ${emitterAUTH}]\r\n`;
-let timeslot = [];
-let messagetoSend = [];
-const client = new net.Socket();
+// Create a net socket object.
+const socket = new net.Socket();
 
-// When data is 2:C580 make it 2:C580:0000
+// Connect to server.
 
+let TXTimeSlot = [];
+let messages = [];
 
-client.connect(dapnetPort, dapnetHost, function() {
-    console.log("Connected");
-    client.write(string);
-    console.log('Sent: ' + string);
+// Make a async loop for timeslot in a new Thread
+function getTimeSlot() {
+    t = Math.floor(Date.now() / 100);
+    slot = (t >> 6) & 0b1111;
+    // Encode slot to hex
+    slot = slot.toString(16);
+    // If it's a letter put it in caps
+    slot = slot.toUpperCase();
+    return slot;
+}
+async function timeslotLoop() {
+    while (true)
+    {
+        // delay 1 second
+        await new Promise(resolve => setTimeout(resolve, 300));
 
+        // If GetTimeSlot() is equal to one of TXTimeSlot, send a message
+        if (TXTimeSlot.includes(getTimeSlot())) {
+            // Check if there is a message to send
+            if (messages.length > 0) {
+                // Send message
+                let message = messages.shift();
+                console.log(`Sending message: ${message[4]} to ${message[2]}`);
+            }
+        }
+    }
+}
+timeslotLoop()
+
+socket.connect(config.DAPNETport, config.DAPNEThost, function() {
+    console.log(`Connected to ${config.DAPNEThost}:${config.DAPNETport}`);
+    // We need to send a string like this: [APPName vAPPVersion EMITTERCall EMITTERAuth]\r\n to the server. We use \r\n to tell the server that we are done.
+    // So we create a string with the data from config.json
+    let authString = `[${config.APPName} v${config.APPVersion} ${config.EMITTERCall} ${config.EMITTERAuth}]\r\n`;
+    // And send it to the server.
+    socket.write(authString);
 });
 
-client.on('data', function(data) {
-    console.log('Received: ' + data);
-    if (data.toString().startsWith('2')) {
-        // Remove data last character
-        let dataString = data.toString().slice(0, -1)+':0000';
-        client.write(dataString + '\r\n');
-        // Envoie + au serveur
-        client.write('+' + '\r\n');
+// When receive data, process it like descibed in the DAPNET WIKI.
+socket.on('data', async function(data) {
+    // We should receive a message like: 2:6116 where 6116 is the server time hex encoded. We need to answer with 2:6116:0000
+    // For this, we'll check what's the first character of the received data.
+    if (data.toString().charAt(0) == '2') {
+        // We will remove the last character of the received data, because it's a \n
+        let answer = data.toString().slice(0, -1);
+        socket.write(answer+':0000\r\n'); // And send it to the server.
+        // we also need to send a "+"
+        socket.write('+\r\n');
+    } // This action will be repeated 4 times at each connection to the server.
+    // Now, we need to process the received data when it starts with a 3.
+    if (data.toString().charAt(0) == '3') { // This data tells us how to set our clock. We mostly use NTP, so we don't need to do anything here.
+        // We will remove the last character of the received data, because it's a \n
+        let answer = data.toString().slice(0, -1);
+        socket.write('+\r\n');
+        // We just need to send a "+"
     }
-    if (data.toString().startsWith('3'))
-    {
-        client.write('+' + '\r\n');
+    // Now, we need to process the received data when it starts with a 4.
+    if (data.toString().charAt(0) == '4') { // This data tells us our timeslot
+        // We will remove the last character of the received data, because it's a \n
+        let answer = data.toString().slice(0, -1).split(':'); // We split the data at the ":" to get the timeslot
+        let timeslot = answer[1].split(''); // We get the
+        TXTimeSlot = timeslot;
+        console.log(`Timeslot aquired: ${timeslot.join(' ')}`);
+        socket.write('+\r\n');
+        // We just need to send a "+" again
     }
-    if (data.toString().startsWith('4'))
-    {
-        // Delete the first two characters and the last one
-        let dataString = data.toString().slice(2, -1).split('');
-        timeslot = dataString;
-        client.write('+' + '\r\n');
-    }
-    // remove the first # and the last "character"
-    if (data.toString().startsWith('#'))
-    {
-        let dataString = data.toString().slice(1, -1).split(' '); // dataString[0] = number of message, dataString[1] = data
-        let struct = dataString[1].split(':');
-        // datastring[0] = number of message
-        // Send back #datastring[0] +
-        // struct[0] = message type
-        // struct[1] = POCSAG SPEED (1200 or 2400) 1 is 1200 and 2 is 2400
-        // struct[2] = RIC (Recipient Identity Code) in HEX, we need to convert it to decimal
-        // struct[3] = Function bits
-        // struct[4] = Message
+    // Now we will process incoming messages.
+    // We have to check if the first character is a #, because this is a message.
+    if (data.toString().charAt(0) == '#') {
+        // We will remove the first and last character of the received data, because it's a # and a \n
+        let answer = data.toString().slice(1, -1).split(' '); // We split the data at the ":" to get the data
+        if (answer.length > 2) {
+            for (let i = 2; i < answer.length; i++) {
+                answer[1] = answer[1] + ' ' + answer[i];
+            }
+        }
+        // answer[0] is the message number, answer[1] is the data
+        let messageStruct = answer[1].split(':'); // We split the data at the ":" to get the data
+        // messageStruct[0] is the message type
+        // messageStruct[1] is the pocsag speed (1 = 1200)
+        // messageStruct[2] is the RIC (callsign of the pager) it is hex encoded
+        // messageStruct[3] is the function bits
+        // messageStruct[4] is the message
+        // Add messageStruct[5] to messageStruct[4] if it exists, same for messageStruct[6] etc.
+        if (messageStruct.length > 5) {
+            for (let i = 5; i < messageStruct.length; i++) {
+                messageStruct[4] = messageStruct[4] + ':' + messageStruct[i];
+            }
+        }
 
-        // Convert struct[2] to decimal
-        struct[2] = parseInt(struct[2], 16);
-
-        client.write('#' + dataString[0] + ' +' + '\r\n'); // Send back the message number
-        messagetoSend.push(struct);
+        // Now we need to decode the RIC
+        messageStruct[2] = parseInt(messageStruct[2], 16);
+        console.log(`Message received: ${messageStruct[4]} to ${messageStruct[2]}`);
+        messages.push(messageStruct);
+        // We send back #messageNumber to the server to tell it that we received the message.
+        socket.write(`#${answer[0]} +\r\n`);
     }
-
 });

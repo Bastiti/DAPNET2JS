@@ -1,0 +1,8 @@
+{
+    "DAPNEThost": "db0dbn.ig-funk-siebengebirge.de",
+    "DAPNETport": 43434,
+    "EMITTERCall": "on4bcy",
+    "EMITTERAuth": "ad5zTpjPkdX9kPjWaJqd",
+    "APPName": "DAPNET2JS",
+    "APPVersion": "0.0.2"
+}
