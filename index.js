@@ -12,7 +12,8 @@ const appName = 'esp32';
 const appVersion = 'v0.1';
 
 let string = `[${appName} ${appVersion} ${emitterCallsign} ${emitterAUTH}]\r\n`;
-let array = [];
+let timeslot = [];
+let messagetoSend = [];
 const client = new net.Socket();
 
 // When data is 2:C580 make it 2:C580:0000
@@ -42,18 +43,27 @@ client.on('data', function(data) {
     {
         // Delete the first two characters and the last one
         let dataString = data.toString().slice(2, -1).split('');
-        array = dataString;
+        timeslot = dataString;
         client.write('+' + '\r\n');
     }
-    // remove the first # and the first space and the last one
+    // remove the first # and the last "character"
     if (data.toString().startsWith('#'))
     {
-        let dataString = data.toString().slice(1, -1).split(' ');
+        let dataString = data.toString().slice(1, -1).split(' '); // dataString[0] = number of message, dataString[1] = data
         let struct = dataString[1].split(':');
         // datastring[0] = number of message
         // Send back #datastring[0] +
-        client.write('#' + dataString[0] + ' +' + '\r\n');
-        console.log(struct);
+        // struct[0] = message type
+        // struct[1] = POCSAG SPEED (1200 or 2400) 1 is 1200 and 2 is 2400
+        // struct[2] = RIC (Recipient Identity Code) in HEX, we need to convert it to decimal
+        // struct[3] = Function bits
+        // struct[4] = Message
+
+        // Convert struct[2] to decimal
+        struct[2] = parseInt(struct[2], 16);
+
+        client.write('#' + dataString[0] + ' +' + '\r\n'); // Send back the message number
+        messagetoSend.push(struct);
     }
 
 });
