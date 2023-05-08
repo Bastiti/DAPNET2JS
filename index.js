@@ -83,7 +83,7 @@ socket.on('data', async function(data) {
     if (data.toString().charAt(0) == '#') {
         // We will remove the first and last character of the received data, because it's a # and a \n
         let answer = data.toString().slice(1, -1).split(' '); // We split the data at the ":" to get the data
-        if (answer.length > 2) {
+        if (answer.length > 2) { // If there is a space in the message, we need to add the rest of the message to answer[1]
             for (let i = 2; i < answer.length; i++) {
                 answer[1] = answer[1] + ' ' + answer[i];
             }
@@ -96,7 +96,7 @@ socket.on('data', async function(data) {
         // messageStruct[3] is the function bits
         // messageStruct[4] is the message
         // Add messageStruct[5] to messageStruct[4] if it exists, same for messageStruct[6] etc.
-        if (messageStruct.length > 5) {
+        if (messageStruct.length > 5) { // If there is a : in the message, we need to add the rest of the message to messageStruct[4]
             for (let i = 5; i < messageStruct.length; i++) {
                 messageStruct[4] = messageStruct[4] + ':' + messageStruct[i];
             }
