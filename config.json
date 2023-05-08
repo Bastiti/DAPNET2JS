@@ -1,8 +1,8 @@
 {
-    "DAPNEThost": "db0dbn.ig-funk-siebengebirge.de",
+    "DAPNEThost": "dapnet.afu.rwth-aachen.de",
     "DAPNETport": 43434,
-    "EMITTERCall": "on4bcy",
-    "EMITTERAuth": "ad5zTpjPkdX9kPjWaJqd",
+    "EMITTERCall": "YOURCALL",
+    "EMITTERAuth": "YOURPASS",
     "APPName": "DAPNET2JS",
     "APPVersion": "0.0.2"
 }
